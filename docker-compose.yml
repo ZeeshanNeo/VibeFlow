@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  # Oracle Database
+  oracle-db:
+    image: container-registry.oracle.com/database/express:21.3.0-xe
+    container_name: vibeflow-oracle
+    environment:
+      - ORACLE_PWD=oracle
+    ports:
+      - "1521:1521"
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "sqlplus", "-L", "system/oracle@localhost:1521/XE", "<<<", "SELECT 1 FROM DUAL"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - vibeflow-network
+
+  # Backend API
+  backend:
+    build: ./backend
+    container_name: vibeflow-backend
+    environment:
+      - DB_USER=system
+      - DB_PASSWORD=oracle
+      - DB_CONNECT_STRING=oracle-db:1521/XE
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+      - JWT_EXPIRES_IN=24h
+      - NODE_ENV=production
+      - PORT=8080
+    ports:
+      - "8081:8080"
+    depends_on:
+      oracle-db:
+        condition: service_healthy
+    networks:
+      - vibeflow-network
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        - REACT_APP_API_URL=
+    container_name: vibeflow-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    networks:
+      - vibeflow-network
+    restart: unless-stopped
+
+volumes:
+  oracle-data:
+    driver: local
+
+networks:
+  vibeflow-network:
+    driver: bridge
