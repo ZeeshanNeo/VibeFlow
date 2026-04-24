@@ -92,7 +92,7 @@ const createTask = async (req, res, next) => {
 
     // Record assignment history if assignee is set
     if (sanitizedAssigneeId) {
-      await AssignmentHistory.recordChange(task.id, null, sanitizedAssigneeId, createdBy);
+      await AssignmentHistory.recordChange(task.id || task.ID, null, sanitizedAssigneeId, createdBy);
     }
 
     res.status(201).json({
