@@ -157,6 +157,56 @@ const getProfile = async (req, res, next) => {
 };
 
 /**
+ * Update current user profile
+ */
+const updateProfile = async (req, res, next) => {
+  try {
+    const { name, email } = req.body;
+    
+    // Check if email already exists for another user
+    if (email) {
+      const existingUser = await User.findByEmail(email);
+      // user.ID or user.id parsing
+      const existingId = existingUser ? (existingUser.ID || existingUser.id) : null;
+      if (existingUser && existingId !== req.user.userId) {
+        return res.status(409).json({ error: 'Email already in use' });
+      }
+    }
+
+    const updatedUser = await User.updateProfile(req.user.userId, name, email);
+    
+    if (!updatedUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const userId = updatedUser.ID || updatedUser.id;
+    const userEmail = updatedUser.EMAIL || updatedUser.email;
+    const userName = updatedUser.NAME || updatedUser.name;
+    const userCreatedAt = updatedUser.CREATED_AT || updatedUser.created_at;
+
+    // Issue a new token in case email changed
+    const token = jwt.sign(
+      { userId: userId, email: userEmail },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
+    );
+
+    res.json({
+      message: 'Profile updated successfully',
+      user: {
+        id: userId,
+        email: userEmail,
+        name: userName,
+        created_at: userCreatedAt,
+      },
+      token,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * Get all users (for assignee dropdown)
  */
 const getAllUsers = async (req, res, next) => {
@@ -173,5 +223,6 @@ module.exports = {
   login,
   logout,
   getProfile,
+  updateProfile,
   getAllUsers,
 };

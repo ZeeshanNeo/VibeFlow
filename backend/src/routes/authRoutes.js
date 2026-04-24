@@ -32,6 +32,13 @@ router.post('/logout', authenticateToken, authController.logout);
 router.get('/profile', authenticateToken, authController.getProfile);
 
 /**
+ * @route   PUT /api/auth/profile
+ * @desc    Update current user profile
+ * @access  Private
+ */
+router.put('/profile', authenticateToken, authController.updateProfile);
+
+/**
  * @route   GET /api/auth/users
  * @desc    Get all users (for assignee dropdown)
  * @access  Private

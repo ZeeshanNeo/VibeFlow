@@ -66,6 +66,15 @@ class User {
   }
 
   /**
+   * Update user profile settings
+   */
+  static async updateProfile(id, name, email) {
+    const sql = 'UPDATE USERS SET name = :name, email = :email WHERE id = :id';
+    await executeQuery(sql, [name, email, id]);
+    return await this.findById(id);
+  }
+
+  /**
    * Check if email exists
    */
   static async emailExists(email) {
