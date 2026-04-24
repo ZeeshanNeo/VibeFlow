@@ -54,6 +54,7 @@ const getAllTasks = async (req, res, next) => {
  */
 const getTaskById = async (req, res, next) => {
   try {
+    const userId = req.user.userId || req.user.id;
     const taskId = parseInt(req.params.id);
     const task = await Task.findById(taskId);
     
@@ -79,7 +80,7 @@ const createTask = async (req, res, next) => {
     }
 
     const { title, assigneeId, dueDate, status, description } = value;
-    const createdBy = req.user.userId;
+    const createdBy = req.user.userId || req.user.id;
 
     // Sanitize assigneeId: empty string -> null
     const sanitizedAssigneeId = assigneeId === '' ? null : assigneeId;

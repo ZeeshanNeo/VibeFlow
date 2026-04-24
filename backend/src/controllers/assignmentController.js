@@ -22,7 +22,7 @@ const assignTask = async (req, res, next) => {
     }
 
     const { assigneeId } = value;
-    const changedBy = req.user.userId;
+    const changedBy = req.user.userId || req.user.id;
 
     // Check if task exists
     const existingTask = await Task.findById(taskId);
@@ -104,7 +104,7 @@ const getAllAssignmentHistory = async (req, res, next) => {
  */
 const getMyAssignmentHistory = async (req, res, next) => {
   try {
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
     const history = await AssignmentHistory.getByUserId(userId);
     res.json({ history });
   } catch (error) {

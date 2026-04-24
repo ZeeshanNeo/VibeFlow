@@ -22,7 +22,7 @@ const createWorkLog = async (req, res, next) => {
     }
 
     const { hoursLogged, description } = value;
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
 
     // Check if task exists
     const task = await Task.findById(taskId);
@@ -78,7 +78,7 @@ const getWorkLogsByTask = async (req, res, next) => {
  */
 const getMyWorkLogs = async (req, res, next) => {
   try {
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
     const workLogs = await WorkLog.getByUserId(userId);
     
     // Calculate total hours for user
