@@ -37,7 +37,7 @@ class User {
    */
   static async findByEmail(email) {
     const sql = 'SELECT * FROM USERS WHERE email = :email';
-    return await executeQuerySingle(sql, [email]);
+    return await executeQuerySingle(sql, { email });
   }
 
   /**
@@ -45,7 +45,7 @@ class User {
    */
   static async findById(id) {
     const sql = 'SELECT * FROM USERS WHERE id = :id';
-    return await executeQuerySingle(sql, [id]);
+    return await executeQuerySingle(sql, { id });
   }
 
   /**
@@ -61,7 +61,7 @@ class User {
    */
   static async updatePassword(id, passwordHash) {
     const sql = 'UPDATE USERS SET password_hash = :passwordHash WHERE id = :id';
-    await executeQuery(sql, [passwordHash, id]);
+    await executeQuery(sql, { passwordHash, id });
     return true;
   }
 
@@ -70,7 +70,7 @@ class User {
    */
   static async updateProfile(id, name, email) {
     const sql = 'UPDATE USERS SET name = :name, email = :email WHERE id = :id';
-    await executeQuery(sql, [name, email, id]);
+    await executeQuery(sql, { name, email, id });
     return await this.findById(id);
   }
 
@@ -79,7 +79,7 @@ class User {
    */
   static async emailExists(email) {
     const sql = 'SELECT COUNT(*) as count FROM USERS WHERE email = :email';
-    const result = await executeQuerySingle(sql, [email]);
+    const result = await executeQuerySingle(sql, { email });
     return result.count > 0;
   }
 }

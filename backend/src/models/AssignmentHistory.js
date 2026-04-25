@@ -9,7 +9,7 @@ class AssignmentHistory {
       INSERT INTO ASSIGNMENT_HISTORY (task_id, old_assignee_id, new_assignee_id, changed_by)
       VALUES (:taskId, :oldAssigneeId, :newAssigneeId, :changedBy)
     `;
-    await executeQuery(sql, [taskId, oldAssigneeId, newAssigneeId, changedBy]);
+    await executeQuery(sql, { taskId, oldAssigneeId, newAssigneeId, changedBy });
     return true;
   }
 
@@ -30,7 +30,7 @@ class AssignmentHistory {
       WHERE ah.task_id = :taskId
       ORDER BY ah.changed_at DESC
     `;
-    return await executeQueryRows(sql, [taskId]);
+    return await executeQueryRows(sql, { taskId });
   }
 
   /**
@@ -73,7 +73,7 @@ class AssignmentHistory {
       WHERE ah.old_assignee_id = :userId OR ah.new_assignee_id = :userId
       ORDER BY ah.changed_at DESC
     `;
-    return await executeQueryRows(sql, [userId]);
+    return await executeQueryRows(sql, { userId });
   }
 
   /**

@@ -9,6 +9,10 @@ class Task {
       due_date: 'due_date',
       assigneeId: 'assignee_id',
       assignee_id: 'assignee_id',
+      issueType: 'issue_type',
+      issue_type: 'issue_type',
+      parentId: 'parent_id',
+      parent_id: 'parent_id',
     };
 
     return Object.entries(updates).reduce((acc, [key, value]) => {
@@ -23,32 +27,28 @@ class Task {
   /**
    * Create a new task
    */
-  static async create(title, createdBy, assigneeId = null, dueDate = null, status = 'Backlog', description = null) {
-    // Get max position in the backlog column
+  static async create(title, createdBy, assigneeId = null, dueDate = null, status = 'Backlog', description = null, projectId = null, issueType = 'Task', parentId = null) {
     const maxPosResult = await executeQuerySingle(
       'SELECT COALESCE(MAX(position), 0) as maxPos FROM TASKS WHERE status = :status',
       { status }
     );
-    // Ensure maxPos is a number (could be null from Oracle)
     const maxPos = maxPosResult?.maxPos !== null && maxPosResult?.maxPos !== undefined ? Number(maxPosResult.maxPos) : 0;
     const position = maxPos + 1;
 
     console.log('Task.create debug:', { maxPosResult, maxPos, position, status });
 
     const sql = `
-      INSERT INTO TASKS (title, description, status, assignee_id, due_date, created_by, position)
-      VALUES (:title, :description, :status, :assigneeId, :dueDate, :createdBy, :position)
+      INSERT INTO TASKS (title, description, status, assignee_id, due_date, created_by, position, project_id, issue_type, parent_id)
+      VALUES (:title, :description, :status, :assigneeId, :dueDate, :createdBy, :position, :projectId, :issueType, :parentId)
       RETURNING id INTO :id
     `;
-    
-    // Convert undefined to null for Oracle binds, but ensure position is a number
-    // Also ensure numeric values are numbers, not strings
+
     const safeNumber = (val) => {
       if (val == null) return null;
       const num = Number(val);
       return isNaN(num) ? null : num;
     };
-    
+
     const oracledb = require('oracledb');
     const binds = {
       title: title || null,
@@ -58,22 +58,17 @@ class Task {
       dueDate: dueDate || null,
       createdBy: safeNumber(createdBy),
       position: Number(position),
+      projectId: safeNumber(projectId),
+      issueType: issueType || 'Task',
+      parentId: safeNumber(parentId),
       id: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER }
     };
 
-    // Debug logging
     console.log('Task.create binds:', JSON.stringify(binds, null, 2));
-    console.log('Bind types:', {
-      assigneeId: typeof binds.assigneeId,
-      dueDate: typeof binds.dueDate,
-      createdBy: typeof binds.createdBy,
-      position: typeof binds.position
-    });
 
     const result = await executeQuery(sql, binds);
     const taskId = result.outBinds.id[0];
-    
-    // Return the created task
+
     return await this.findById(taskId);
   }
 
@@ -85,27 +80,57 @@ class Task {
       SELECT 
         t.*,
         u.email as assignee_email,
-        creator.email as created_by_email
+        u.name as assignee_name,
+        creator.email as created_by_email,
+        p.name as project_name,
+        p.key as project_key
       FROM TASKS t
       LEFT JOIN USERS u ON t.assignee_id = u.id
       LEFT JOIN USERS creator ON t.created_by = creator.id
+      LEFT JOIN PROJECTS p ON t.project_id = p.id
       WHERE t.id = :id
     `;
-    return await executeQuerySingle(sql, [id]);
+    return await executeQuerySingle(sql, { id });
   }
 
   /**
-   * Get all tasks with assignee and creator details
+   * Get tasks by project ID
+   */
+  static async getByProject(projectId) {
+    const sql = `
+      SELECT 
+        t.*,
+        u.email as assignee_email,
+        u.name as assignee_name,
+        creator.email as created_by_email,
+        p.name as project_name,
+        p.key as project_key
+      FROM TASKS t
+      LEFT JOIN USERS u ON t.assignee_id = u.id
+      LEFT JOIN USERS creator ON t.created_by = creator.id
+      LEFT JOIN PROJECTS p ON t.project_id = p.id
+      WHERE t.project_id = :projectId
+      ORDER BY t.status, t.position
+    `;
+    return await executeQueryRows(sql, { projectId });
+  }
+
+  /**
+   * Get all tasks (admin/legacy use)
    */
   static async getAll() {
     const sql = `
       SELECT 
         t.*,
         u.email as assignee_email,
-        creator.email as created_by_email
+        u.name as assignee_name,
+        creator.email as created_by_email,
+        p.name as project_name,
+        p.key as project_key
       FROM TASKS t
       LEFT JOIN USERS u ON t.assignee_id = u.id
       LEFT JOIN USERS creator ON t.created_by = creator.id
+      LEFT JOIN PROJECTS p ON t.project_id = p.id
       ORDER BY t.status, t.position
     `;
     return await executeQueryRows(sql);
@@ -119,6 +144,7 @@ class Task {
       SELECT 
         t.*,
         u.email as assignee_email,
+        u.name as assignee_name,
         creator.email as created_by_email
       FROM TASKS t
       LEFT JOIN USERS u ON t.assignee_id = u.id
@@ -126,19 +152,17 @@ class Task {
       WHERE t.status = :status
       ORDER BY t.position
     `;
-    return await executeQueryRows(sql, [status]);
+    return await executeQueryRows(sql, { status });
   }
 
   /**
    * Update task status (drag-and-drop column change)
    */
   static async updateStatus(taskId, newStatus) {
-    // Get max position in new column
     const maxPosResult = await executeQuerySingle(
       'SELECT COALESCE(MAX(position), 0) as maxPos FROM TASKS WHERE status = :status',
       { status: newStatus }
     );
-    // Ensure maxPos is a number (could be null from Oracle)
     const maxPos = maxPosResult?.maxPos !== null && maxPosResult?.maxPos !== undefined ? Number(maxPosResult.maxPos) : 0;
     const newPosition = maxPos + 1;
 
@@ -148,7 +172,7 @@ class Task {
       WHERE id = :taskId
     `;
     await executeQuery(sql, { newStatus, newPosition, taskId });
-    
+
     return await this.findById(taskId);
   }
 
@@ -166,10 +190,10 @@ class Task {
       SET position = :newPosition
       WHERE id = :taskId AND status = :status
     `;
-    await executeQuery(sql, { 
-      newPosition: safeNumber(newPosition), 
-      taskId: safeNumber(taskId), 
-      status 
+    await executeQuery(sql, {
+      newPosition: safeNumber(newPosition),
+      taskId: safeNumber(taskId),
+      status
     });
     return await this.findById(taskId);
   }
@@ -193,21 +217,21 @@ class Task {
    */
   static async update(taskId, updates) {
     const normalizedUpdates = this.normalizeUpdateFields(updates);
-    const allowedFields = ['title', 'due_date', 'assignee_id', 'description'];
+    const allowedFields = ['title', 'due_date', 'assignee_id', 'description', 'issue_type', 'parent_id'];
     const setClauses = [];
     const binds = { taskId };
-    
+
     Object.keys(normalizedUpdates).forEach(key => {
       if (allowedFields.includes(key)) {
         setClauses.push(`${key} = :${key}`);
         binds[key] = normalizedUpdates[key];
       }
     });
-    
+
     if (setClauses.length === 0) {
       return await this.findById(taskId);
     }
-    
+
     const sql = `UPDATE TASKS SET ${setClauses.join(', ')} WHERE id = :taskId`;
     await executeQuery(sql, binds);
     return await this.findById(taskId);
@@ -223,7 +247,7 @@ class Task {
       return isNaN(num) ? null : num;
     };
     const sql = 'DELETE FROM TASKS WHERE id = :taskId';
-    await executeQuery(sql, [safeNumber(taskId)]);
+    await executeQuery(sql, { taskId: safeNumber(taskId) });
     return true;
   }
 
@@ -237,7 +261,7 @@ class Task {
       const num = Number(val);
       return isNaN(num) ? null : num;
     };
-    
+
     for (let i = 0; i < taskIdsInOrder.length; i++) {
       const taskId = taskIdsInOrder[i];
       await executeQuery(
@@ -245,7 +269,7 @@ class Task {
         [i + 1, safeNumber(taskId), status]
       );
     }
-    
+
     return true;
   }
 }

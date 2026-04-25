@@ -18,10 +18,12 @@ const dbConfig = {
  */
 const connectToDatabase = async () => {
   try {
-    // Oracle client configuration
-    oracledb.initOracleClient({ libDir: process.env.ORACLE_CLIENT_PATH });
+    // Use thin mode to avoid Oracle client dependency
+    oracledb.initOracleClient({ driverMode: 'thin' });
+    console.log('Oracle client initialized in thin mode');
   } catch (err) {
     console.warn('Oracle client initialization warning:', err.message);
+    // If thin mode fails, try without initialization (will use thin mode by default in node-oracledb 6+)
   }
 
   try {

@@ -1,6 +1,7 @@
 const Joi = require('joi');
 const Task = require('../models/Task');
 const AssignmentHistory = require('../models/AssignmentHistory');
+const ActivityLog = require('../models/ActivityLog');
 
 // Validation schemas
 const createTaskSchema = Joi.object({
@@ -8,6 +9,9 @@ const createTaskSchema = Joi.object({
   description: Joi.string().max(1000).allow('').allow(null).optional(),
   assigneeId: Joi.number().integer().positive().allow(null).default(null),
   dueDate: Joi.date().iso().allow(null).default(null),
+  projectId: Joi.number().integer().positive().allow(null).default(null),
+  issueType: Joi.string().valid('Epic', 'Story', 'Bug', 'Task', 'Subtask').default('Task'),
+  parentId: Joi.number().integer().positive().allow(null).default(null),
   status: Joi.string().valid(
     'Backlog', 'Todo', 'In Progress', 'Review',
     'Testing', 'Done', 'Blocked', 'Archived'
@@ -19,6 +23,8 @@ const updateTaskSchema = Joi.object({
   description: Joi.string().max(1000).allow('').allow(null).optional(),
   assigneeId: Joi.number().integer().positive().allow(null),
   dueDate: Joi.date().iso().allow(null),
+  issueType: Joi.string().valid('Epic', 'Story', 'Bug', 'Task', 'Subtask'),
+  parentId: Joi.number().integer().positive().allow(null),
 }).min(1);
 
 const updateStatusSchema = Joi.object({
@@ -42,7 +48,14 @@ const reorderSchema = Joi.object({
  */
 const getAllTasks = async (req, res, next) => {
   try {
-    const tasks = await Task.getAll();
+    const { projectId } = req.query;
+    let tasks;
+    const pId = parseInt(projectId);
+    if (projectId && !isNaN(pId)) {
+      tasks = await Task.getByProject(pId);
+    } else {
+      tasks = await Task.getAll();
+    }
     res.json({ tasks });
   } catch (error) {
     next(error);
@@ -69,6 +82,19 @@ const getTaskById = async (req, res, next) => {
 };
 
 /**
+ * Get task activity logs
+ */
+const getTaskActivity = async (req, res, next) => {
+  try {
+    const taskId = parseInt(req.params.id);
+    const activity = await ActivityLog.getByTaskId(taskId);
+    res.json({ activity });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * Create a new task
  */
 const createTask = async (req, res, next) => {
@@ -79,20 +105,22 @@ const createTask = async (req, res, next) => {
       return res.status(400).json({ error: error.details[0].message });
     }
 
-    const { title, assigneeId, dueDate, status, description } = value;
+    const { title, assigneeId, dueDate, status, description, projectId, issueType, parentId } = value;
     const createdBy = req.user.userId || req.user.id;
 
-    // Sanitize assigneeId: empty string -> null
     const sanitizedAssigneeId = assigneeId === '' ? null : assigneeId;
-    // Sanitize dueDate: empty string -> null
     const sanitizedDueDate = dueDate === '' ? null : dueDate;
+    const sanitizedProjectId = projectId === '' ? null : projectId;
+    const sanitizedParentId = parentId === '' ? null : parentId;
 
-    // Create task
-    const task = await Task.create(title, createdBy, sanitizedAssigneeId, sanitizedDueDate, status, description);
+    const task = await Task.create(title, createdBy, sanitizedAssigneeId, sanitizedDueDate, status, description, sanitizedProjectId, issueType || 'Task', sanitizedParentId);
+    const tId = task.id || task.ID;
 
-    // Record assignment history if assignee is set
+    // Record activity
+    await ActivityLog.record(tId, createdBy, 'CREATED', null, title);
+
     if (sanitizedAssigneeId) {
-      await AssignmentHistory.recordChange(task.id || task.ID, null, sanitizedAssigneeId, createdBy);
+      await AssignmentHistory.recordChange(tId, null, sanitizedAssigneeId, createdBy);
     }
 
     res.status(201).json({
@@ -125,12 +153,23 @@ const updateTask = async (req, res, next) => {
 
     // Record assignment change if assignee is being updated
     if (value.assigneeId !== undefined && value.assigneeId !== existingTask.assignee_id) {
+      const changerId = req.user.userId || req.user.id;
       await AssignmentHistory.recordChange(
         taskId,
         existingTask.assignee_id,
         value.assigneeId,
-        req.user.userId
+        changerId
       );
+      await ActivityLog.record(taskId, changerId, 'ASSIGNEE_CHANGE', existingTask.assignee_id, value.assigneeId);
+    }
+
+    // Record activity for title/description changes
+    const changerId = req.user.userId || req.user.id;
+    if (value.title !== undefined && value.title !== existingTask.title) {
+      await ActivityLog.record(taskId, changerId, 'TITLE_CHANGE', existingTask.title, value.title);
+    }
+    if (value.description !== undefined && value.description !== existingTask.description) {
+      await ActivityLog.record(taskId, changerId, 'DESCRIPTION_CHANGE', existingTask.description ? 'Description updated' : 'Description added', 'New description');
     }
 
     // Update task
@@ -168,6 +207,12 @@ const updateTaskStatus = async (req, res, next) => {
 
     // Update status
     const updatedTask = await Task.updateStatus(taskId, status);
+
+    // Record activity
+    const userId = req.user.userId || req.user.id;
+    if (existingTask.status !== status) {
+      await ActivityLog.record(taskId, userId, 'STATUS_CHANGE', existingTask.status, status);
+    }
 
     res.json({
       message: 'Task status updated successfully',
@@ -249,6 +294,7 @@ const getTasksByStatus = async (req, res, next) => {
 module.exports = {
   getAllTasks,
   getTaskById,
+  getTaskActivity,
   createTask,
   updateTask,
   updateTaskStatus,

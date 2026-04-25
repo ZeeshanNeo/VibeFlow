@@ -8,20 +8,30 @@ const WorkLog = require('../models/WorkLog');
  */
 const getTimeReport = async (req, res, next) => {
   try {
-    // Use the view created in database/init.sql
-    const sql = `
+    const { projectId } = req.query;
+    
+    let sql = `
       SELECT 
         id,
         title,
         status,
+        project_id,
         assignee_email,
         created_by_email,
         total_hours
       FROM TASK_REPORT_VIEW
-      ORDER BY status, title
     `;
     
-    const tasks = await executeQueryRows(sql);
+    const binds = {};
+    const pId = parseInt(projectId);
+    if (!isNaN(pId)) {
+      sql += ' WHERE project_id = :projectId';
+      binds.projectId = pId;
+    }
+    
+    sql += ' ORDER BY status, title';
+    
+    const tasks = await executeQueryRows(sql, binds);
     
     // Calculate grand total
     const grandTotal = tasks.reduce((sum, task) => sum + parseFloat(task.total_hours || 0), 0);
@@ -46,13 +56,14 @@ const getTimeReport = async (req, res, next) => {
  */
 const getDetailedTimeReport = async (req, res, next) => {
   try {
-    const { status, assigneeId, startDate, endDate } = req.query;
+    const { status, assigneeId, startDate, endDate, projectId } = req.query;
     
     let sql = `
       SELECT 
         t.id,
         t.title,
         t.status,
+        t.project_id,
         u.email as assignee_email,
         creator.email as created_by_email,
         COALESCE(SUM(wl.hours_logged), 0) as total_hours,
@@ -86,13 +97,18 @@ const getDetailedTimeReport = async (req, res, next) => {
       binds.endDate = endDate;
     }
     
+    if (projectId && !isNaN(parseInt(projectId))) {
+      conditions.push('t.project_id = :projectId');
+      binds.projectId = parseInt(projectId);
+    }
+    
     if (conditions.length > 0) {
       sql += ' WHERE ' + conditions.join(' AND ');
     }
     
     sql += ' GROUP BY t.id, t.title, t.status, u.email, creator.email ORDER BY t.status, t.title';
     
-    const tasks = await executeQueryRows(sql, Object.values(binds));
+    const tasks = await executeQueryRows(sql, binds);
     
     // Calculate totals
     const grandTotal = tasks.reduce((sum, task) => sum + parseFloat(task.total_hours || 0), 0);

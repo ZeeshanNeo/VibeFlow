@@ -39,7 +39,7 @@ class WorkLog {
       JOIN USERS u ON wl.user_id = u.id
       WHERE wl.id = :id
     `;
-    return await executeQuerySingle(sql, [id]);
+    return await executeQuerySingle(sql, { id });
   }
 
   /**
@@ -55,7 +55,7 @@ class WorkLog {
       WHERE wl.task_id = :taskId
       ORDER BY wl.created_at DESC
     `;
-    return await executeQueryRows(sql, [taskId]);
+    return await executeQueryRows(sql, { taskId });
   }
 
   /**
@@ -72,7 +72,7 @@ class WorkLog {
       WHERE wl.user_id = :userId
       ORDER BY wl.created_at DESC
     `;
-    return await executeQueryRows(sql, [userId]);
+    return await executeQueryRows(sql, { userId });
   }
 
   /**
@@ -80,7 +80,7 @@ class WorkLog {
    */
   static async getTotalHoursByTask(taskId) {
     const sql = 'SELECT COALESCE(SUM(hours_logged), 0) as total_hours FROM WORK_LOGS WHERE task_id = :taskId';
-    const result = await executeQuerySingle(sql, [taskId]);
+    const result = await executeQuerySingle(sql, { taskId });
     return result.total_hours;
   }
 
@@ -109,7 +109,7 @@ class WorkLog {
       ORDER BY wl.created_at DESC
       OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY
     `;
-    return await executeQueryRows(sql, [offset, limit]);
+    return await executeQueryRows(sql, { offset, limit });
   }
 
   /**
@@ -126,7 +126,7 @@ class WorkLog {
       GROUP BY TRUNC(created_at)
       ORDER BY log_date DESC
     `;
-    return await executeQueryRows(sql, [days]);
+    return await executeQueryRows(sql, { days });
   }
 
   /**

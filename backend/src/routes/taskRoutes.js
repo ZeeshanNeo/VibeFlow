@@ -23,6 +23,7 @@ router.get('/status/:status', authenticateToken, taskController.getTasksByStatus
  * @access  Private
  */
 router.get('/:id', authenticateToken, taskController.getTaskById);
+router.get('/:id/activity', authenticateToken, taskController.getTaskActivity);
 
 /**
  * @route   POST /api/tasks
